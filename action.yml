@@ -1,0 +1,66 @@
+name: 'Release candidate'
+description: 'create a release candidate branch and open a pull request from it a gainst the main/master branch'
+inputs:
+  target-branch:
+    description: 'target branch'
+    required: true
+    default: master
+  reviewers:
+    description: 'release candidate PR reviewers'
+    required: true
+  team-id:
+    description: 'the linear team id'
+    required: true
+  api-key:
+    description: 'linear personal api key'
+    required: true
+  GITHUB_TOKEN: 
+    description: 'github token'
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - uses: oleksiyrudenko/gha-git-credentials@v2-latest
+      name: configure git
+      with:
+        token: '${{ inputs.GITHUB_TOKEN }}'
+    - name: rebase release-candidate to master
+      shell: bash
+      run: |
+        git config --global push.default simple
+        git checkout -b release-candidate
+        git rebase origin/master
+        git push --force origin release-candidate 
+    - name: pull-request-action
+      id: cpr
+      if: ${{ always() }}
+      uses: vsoch/pull-request-action@1.0.12
+      env:
+        GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
+        PULL_REQUEST_BRANCH: ${{ inputs.target-branch }}
+        PULL_REQUEST_REVIEWERS: ${{ inputs.reviewers }}
+        PULL_REQUEST_TITLE:  "Release candidate" 
+        PULL_REQUEST_FROM_BRANCH: "release-candidate" 
+    - name: Generate the Comment
+      id: get-comment-body
+      shell: bash
+      if: ${{ always() }}
+      run: |
+        export NODE_PATH="/usr/local/share/.config/yarn/global/node_modules"
+        sudo yarn global add @linear/sdk
+        node ${{ github.action_path }}/.github/scripts/get_issues_linear.js > comment-body.txt
+        body=$(cat comment-body.txt)
+        body="${body//'%'/'%25'}"
+        body="${body//$'\n'/'%0A'}"
+        body="${body//$'\r'/'%0D'}" 
+        echo "::set-output name=body::$body"
+      env:
+        TEAM_ID: ${{ inputs.team-id }}
+        PERSONAL_API_KEY: ${{ inputs.api-key }}
+    - name: Create comment on sprint review PR
+      if: ${{ always() }}
+      uses: peter-evans/create-or-update-comment@v1
+      with:
+        issue-number: ${{ steps.cpr.outputs.pull_request_number }}
+        body: ${{ steps.get-comment-body.outputs.body }}
+        token: ${{ inputs.GITHUB_TOKEN }}
