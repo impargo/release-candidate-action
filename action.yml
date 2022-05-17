@@ -8,9 +8,6 @@ inputs:
   reviewers:
     description: 'release candidate PR reviewers'
     required: true
-  team-id:
-    description: 'the linear team id'
-    required: true
   api-key:
     description: 'linear personal api key'
     required: true
@@ -24,13 +21,32 @@ runs:
       name: configure git
       with:
         token: ${{ inputs.GITHUB_TOKEN }}
-    - name: rebase release-candidate
+    - name: Find Pull Request
+      uses: juliangruber/find-pull-request-action@v1
+      id: find-pull-request
+      with:
+        branch: release-candidate
+    - name: Close Pull
+      uses: peter-evans/close-pull@v2
+      if: ${{ steps.find-pull-request.outputs.number > 0 }}
+      with:
+        pull-request-number: ${{ steps.find-pull-request.outputs.number }}
+        comment: Redoing release candidate
+        delete-branch: true
+    - name: create release-candidate branch with rebasing
       shell: bash
       run: |
         git config --global push.default simple
         git checkout -b release-candidate
         git rebase origin/${{ inputs.target-branch }}
-        git push --force origin release-candidate 
+        git push --force-with-lease origin release-candidate 
+    - name: create release-candidate branch without rebasing
+      if: ${{ failure() }}
+      shell: bash
+      run: |
+        git config --global push.default simple
+        git checkout -b release-candidate
+        git push origin release-candidate
     - name: pull-request-action
       id: cpr
       if: ${{ always() }}
@@ -42,26 +58,18 @@ runs:
         PULL_REQUEST_TITLE:  "Release candidate" 
         PULL_REQUEST_FROM_BRANCH: "release-candidate"
         PULL_REQUEST_UPDATE: 'true'
-    - name: Generate the Comment
-      id: get-comment-body
-      shell: bash
-      if: ${{ always() }}
-      run: |
-        export NODE_PATH="/usr/local/share/.config/yarn/global/node_modules"
-        sudo yarn global add @linear/sdk
-        node ${{ github.action_path }}/get_issues_linear.js > comment-body.txt
-        body=$(cat comment-body.txt)
-        body="${body//'%'/'%25'}"
-        body="${body//$'\n'/'%0A'}"
-        body="${body//$'\r'/'%0D'}" 
-        echo "::set-output name=body::$body"
-      env:
-        TEAM_ID: ${{ inputs.team-id }}
-        PERSONAL_API_KEY: ${{ inputs.api-key }}
     - name: Create comment on sprint review PR
       if: ${{ always() }}
       uses: peter-evans/create-or-update-comment@v1
       with:
         issue-number: ${{ steps.cpr.outputs.pull_request_number }}
-        body: ${{ steps.get-comment-body.outputs.body }}
+        body: |
+          Welcome to the release candidate :tada:. 
+          To see which issues are included in this release, 
+          check the done column in your team's respective currently active cycle:
+          - [Planner & Orders squad](https://linear.app/impargo/team/POS/cycle/active)
+          - [DriverApp & Fleet squad](https://linear.app/impargo/team/DFS/cycle/active)
+          - [DevOps squad](https://linear.app/impargo/team/DEV/cycle/active)
+          - [Design squad](https://linear.app/impargo/team/DES/cycle/active)
+
         token: ${{ inputs.GITHUB_TOKEN }}

@@ -6,7 +6,7 @@ const client = new LinearClient({
 
 async function getTeamDoneIssues(teamID) {
     const team = await client.team(teamID);
-    let msg = '### Done Issues:\n'
+    let msg = `### Done Issues in ${team.name} (${Math.floor((await team.activeCycle).progress * 100 )} %)\n`
     const doneIssues = (await team.issues()).nodes.filter(async (issue) => {
       const state = await issue.state
       return state === 'Done'
@@ -21,6 +21,8 @@ async function getTeamDoneIssues(teamID) {
     }
     console.log(msg)
   }
-  
-getTeamDoneIssues(process.env.TEAM_ID)
-  
+console.log('Welcome to the release candidate!\n')
+getTeamDoneIssues('POS')
+getTeamDoneIssues('DEV')
+getTeamDoneIssues('DFS')
+getTeamDoneIssues('DES')
