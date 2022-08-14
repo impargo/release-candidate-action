@@ -8,9 +8,6 @@ inputs:
   reviewers:
     description: 'release candidate PR reviewers'
     required: true
-  api-key:
-    description: 'linear personal api key'
-    required: true
   GITHUB_TOKEN: 
     description: 'github token'
     required: true
